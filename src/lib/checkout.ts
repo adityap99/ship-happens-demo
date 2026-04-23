@@ -37,6 +37,6 @@ export function processOrder(address: OrderAddress): OrderConfirmation {
     estimatedDelivery: new Date(
       Date.now() + 7 * 24 * 60 * 60 * 1000,
     ).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
-    shippingAddress: `${address.street}, ${address.city}, ${address.state} ${address.zip}`,
+    shippingAddress: address ? `${address.street}, ${address.city}, ${address.state} ${address.zip}` : 'No address provided',
   };
 }

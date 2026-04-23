@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { processOrder, type OrderAddress, type OrderConfirmation } from '../lib/checkout'
+import { applyPromoCode, formatGiftMessage } from '../lib/cart'
+import { fetchSavedAddress } from '../lib/profile'
 import { capture } from '../ship-happens'
 
 interface User {
@@ -82,6 +84,17 @@ export default function CheckoutStepper() {
   const [form, setForm] = useState({ street: '', city: '', state: '', zip: '' })
   const [confirmation, setConfirmation] = useState<OrderConfirmation | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Bug 002 — promo code
+  const [promoCode, setPromoCode] = useState('')
+  const [promoDiscount, setPromoDiscount] = useState<{ discount: number; label: string } | null>(null)
+  const [promoError, setPromoError] = useState<string | null>(null)
+  // Bug 003 — gift message
+  const [giftEnabled, setGiftEnabled] = useState(false)
+  const [giftMsg, setGiftMsg] = useState<string | null>(null)
+  // Bug 004 — async address load
+  const [addressLoading, setAddressLoading] = useState(false)
+
+  const finalTotal = CART_TOTAL - (promoDiscount?.discount ?? 0)
 
   // ── Step 1: Cart review ──────────────────────────────────────────────────
 
@@ -116,9 +129,64 @@ export default function CheckoutStepper() {
         <span>Total</span>
         <span>${CART_TOTAL.toFixed(2)}</span>
       </div>
+
+      {/* ── Bug 002 hint — Easy 🟢 ──────────────────────────────────────── */}
+      <div style={{
+        background: '#0f172a', color: '#e2e8f0', borderRadius: '8px',
+        padding: '12px 16px', marginTop: '20px', marginBottom: '4px', fontSize: '13px', lineHeight: 1.6,
+      }}>
+        <div style={{ fontWeight: 700, color: '#4ade80', marginBottom: '6px', letterSpacing: '0.05em', fontSize: '11px', textTransform: 'uppercase' }}>
+          🟢 Easy bug — promo code crash
+        </div>
+        <div style={{ color: '#94a3b8' }}>
+          Enter <strong style={{ color: '#e2e8f0' }}>any unknown code</strong> (e.g.{' '}
+          <code style={{ color: '#f97316' }}>FREESHIP</code>) and click{' '}
+          <strong style={{ color: '#e2e8f0' }}>Apply</strong> →{' '}
+          <code>TypeError: Cannot read properties of undefined (reading 'percent')</code>
+        </div>
+      </div>
+
+      {promoDiscount && (
+        <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '6px', padding: '8px 14px', marginTop: '10px', fontSize: '13px', color: '#166534', display: 'flex', justifyContent: 'space-between' }}>
+          <span>✓ {promoDiscount.label}</span>
+          <span style={{ fontWeight: 700 }}>−${promoDiscount.discount.toFixed(2)}</span>
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+        <input
+          data-testid="promo-code-input"
+          value={promoCode}
+          onChange={e => { setPromoCode(e.target.value); setPromoError(null) }}
+          placeholder="Promo code (try SAVE10 or anything else)"
+          style={{ flex: 1, padding: '9px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '13px' }}
+        />
+        <button
+          data-testid="apply-promo"
+          style={{ background: '#1e293b', color: 'white', padding: '9px 18px', borderRadius: '6px', fontSize: '13px', fontWeight: 600, border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}
+          onClick={() => {
+            setPromoError(null)
+            try {
+              const result = applyPromoCode(CART_TOTAL, promoCode)
+              setPromoDiscount(result)
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err)
+              setPromoError(msg)
+              capture(err)
+            }
+          }}
+        >
+          Apply
+        </button>
+      </div>
+      {promoError && (
+        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', padding: '8px 12px', marginTop: '6px', fontSize: '13px', color: '#b91c1c' }}>
+          {promoError}
+        </div>
+      )}
+
       <button
         data-testid="continue-to-shipping"
-        style={primaryBtn}
+        style={{ ...primaryBtn, marginTop: '16px' }}
         onClick={() => setStep(2)}
       >
         Continue to Shipping
@@ -131,7 +199,43 @@ export default function CheckoutStepper() {
   if (step === 2) return (
     <div style={card}>
       <StepIndicator current={2} />
-      <h2 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '20px' }}>Shipping Address</h2>
+      <h2 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '16px' }}>Shipping Address</h2>
+
+      {/* ── Bug 004 hint — Hard 🔴 ──────────────────────────────────────── */}
+      <div style={{
+        background: '#0f172a', color: '#e2e8f0', borderRadius: '8px',
+        padding: '12px 16px', marginBottom: '16px', fontSize: '13px', lineHeight: 1.6,
+      }}>
+        <div style={{ fontWeight: 700, color: '#f87171', marginBottom: '6px', letterSpacing: '0.05em', fontSize: '11px', textTransform: 'uppercase' }}>
+          🔴 Hard bug — async profile crash
+        </div>
+        <div style={{ color: '#94a3b8' }}>
+          Click <strong style={{ color: '#e2e8f0' }}>Load saved address</strong> — the profile API returns an empty list for guest users.{' '}
+          The crash fires ~800ms later inside a Promise callback, making the stack trace harder to trace.
+        </div>
+      </div>
+      <button
+        data-testid="load-saved-address"
+        disabled={addressLoading}
+        style={{ background: '#1e293b', color: addressLoading ? '#475569' : '#94a3b8', border: '1px solid #334155', padding: '9px 16px', borderRadius: '6px', fontSize: '13px', fontWeight: 500, marginBottom: '20px', width: '100%', cursor: addressLoading ? 'not-allowed' : 'pointer' }}
+        onClick={() => {
+          setAddressLoading(true)
+          fetchSavedAddress()
+            .then(addr => {
+              // addr is undefined for guest users (empty address list)
+              // → addr.street throws: Cannot read properties of undefined (reading 'street')
+              setForm({ street: addr.street, city: addr.city, state: addr.state, zip: addr.zip })
+              setAddressLoading(false)
+            })
+            .catch(err => {
+              setAddressLoading(false)
+              capture(err)
+            })
+        }}
+      >
+        {addressLoading ? '⟳ Loading…' : '↓ Load saved address'}
+      </button>
+
       {(['street', 'city', 'state', 'zip'] as const).map(field => (
         <div key={field} style={{ marginBottom: '14px' }}>
           <label style={label}>{field.charAt(0).toUpperCase() + field.slice(1)}</label>
@@ -205,34 +309,72 @@ export default function CheckoutStepper() {
         </div>
       )}
 
+      {/* ── Bug 003 hint — Medium 🟡 ─────────────────────────────────────── */}
+      <div style={{
+        background: '#0f172a', color: '#e2e8f0', borderRadius: '8px',
+        padding: '12px 16px', marginBottom: '12px', fontSize: '13px', lineHeight: 1.6,
+      }}>
+        <div style={{ fontWeight: 700, color: '#fbbf24', marginBottom: '6px', letterSpacing: '0.05em', fontSize: '11px', textTransform: 'uppercase' }}>
+          🟡 Medium bug — gift message null crash
+        </div>
+        <div style={{ color: '#94a3b8' }}>
+          Check <strong style={{ color: '#e2e8f0' }}>Add gift message</strong>, type something,
+          then <strong style={{ color: '#f97316' }}>erase all the text</strong> (so the field is empty), then click Place Order
+          → <code>TypeError: Cannot read properties of null (reading 'trim')</code>
+        </div>
+      </div>
+
+      {/* Gift message */}
+      <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '14px', marginBottom: '16px' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: 600, color: '#475569', cursor: 'pointer', marginBottom: giftEnabled ? '10px' : 0 }}>
+          <input
+            type="checkbox"
+            data-testid="gift-toggle"
+            checked={giftEnabled}
+            onChange={e => {
+              setGiftEnabled(e.target.checked)
+              if (e.target.checked) setGiftMsg('')
+            }}
+          />
+          Add a gift message
+        </label>
+        {giftEnabled && (
+          <textarea
+            data-testid="gift-message-input"
+            value={giftMsg ?? ''}
+            onChange={e => setGiftMsg(e.target.value || null)}
+            placeholder="Write your gift message… (then erase it to trigger the bug)"
+            rows={3}
+            style={{ width: '100%', padding: '8px 10px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '13px', resize: 'vertical', boxSizing: 'border-box', marginTop: '2px' }}
+          />
+        )}
+      </div>
+
       <button
         data-testid="place-order"
         style={primaryBtn}
         onClick={() => {
           setError(null)
-          // ── SEEDED BUG ───────────────────────────────────────────────────
-          // user.address is undefined when the user skipped step 2.
-          // processOrder(undefined) throws:
-          //   TypeError: Cannot read properties of undefined (reading 'street')
-          // The Ship Happens SDK captures this and sends a FailureEnvelope.
-          //
-          // FIX (generated by the repair engine):
-          //   Add a guard here — if (!user.address) { setError(...); return; }
-          // ────────────────────────────────────────────────────────────────
           try {
+            if (giftEnabled) {
+              // SEEDED BUG (fix-003): formatGiftMessage(null) throws when the
+              // user erased all text → giftMsg is null via the onChange handler.
+              const _gift = formatGiftMessage(giftMsg)
+              void _gift // would be attached to the order payload in a real app
+            }
+            // SEEDED BUG (fix-001): processOrder(undefined) throws when user
+            // skipped the address step.
             const order = processOrder(user.address!)
             setConfirmation(order)
             setStep(4)
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err)
             setError(msg)
-            // Explicitly capture — window.onerror doesn't fire reliably
-            // for errors thrown inside React 18 event handlers.
             capture(err)
           }
         }}
       >
-        Place Order — ${CART_TOTAL.toFixed(2)}
+        Place Order — ${finalTotal.toFixed(2)}
       </button>
       <button style={secondaryBtn} onClick={() => setStep(2)}>← Back</button>
     </div>

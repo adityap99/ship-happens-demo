@@ -32,6 +32,9 @@ export interface OrderConfirmation {
  * `address.street` on the first line throws immediately.
  */
 export function processOrder(address: OrderAddress): OrderConfirmation {
+  if (!address) {
+    throw new Error('Address is required to process order');
+  }
   return {
     confirmationNumber: `SH-${Math.random().toString(36).substring(2, 9).toUpperCase()}`,
     estimatedDelivery: new Date(

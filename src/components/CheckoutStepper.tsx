@@ -362,9 +362,12 @@ export default function CheckoutStepper() {
               const _gift = formatGiftMessage(giftMsg)
               void _gift // would be attached to the order payload in a real app
             }
-            // SEEDED BUG (fix-001): processOrder(undefined) throws when user
-            // skipped the address step.
-            const order = processOrder(user.address!)
+            // Check if address exists before processing order
+            if (!user.address) {
+              setError('Please add a shipping address before placing your order.');
+              return;
+            }
+            const order = processOrder(user.address)
             setConfirmation(order)
             setStep(4)
           } catch (err) {

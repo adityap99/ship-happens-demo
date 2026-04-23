@@ -31,12 +31,12 @@ export interface OrderConfirmation {
  * when the user skips the address step. The function has no guard, so accessing
  * `address.street` on the first line throws immediately.
  */
-export function processOrder(address: OrderAddress): OrderConfirmation {
+export function processOrder(address: OrderAddress | undefined): OrderConfirmation {
   return {
     confirmationNumber: `SH-${Math.random().toString(36).substring(2, 9).toUpperCase()}`,
     estimatedDelivery: new Date(
       Date.now() + 7 * 24 * 60 * 60 * 1000,
     ).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
-    shippingAddress: `${address.street}, ${address.city}, ${address.state} ${address.zip}`,
+    shippingAddress: address ? `${address.street}, ${address.city}, ${address.state} ${address.zip}` : 'No shipping address provided',
   };
 }

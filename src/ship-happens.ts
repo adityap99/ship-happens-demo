@@ -76,9 +76,14 @@ function transmit(envelope: object) {
 /**
  * Explicit capture — call this directly from try/catch blocks inside React
  * event handlers, where window.onerror may not fire (React 17+ event delegation).
+ * Also pushes to window.__shipHappensCaptured so Playwright can read it.
  */
 export function capture(err: unknown): void {
   const e = err instanceof Error ? err : new Error(String(err));
+  // Expose to Playwright reproduction runner via a global buffer
+  const w = window as Record<string, unknown>;
+  if (!Array.isArray(w.__shipHappensCaptured)) w.__shipHappensCaptured = [];
+  (w.__shipHappensCaptured as unknown[]).push({ message: e.message, stack: e.stack });
   transmit(buildEnvelope(e.message, e.stack ?? ''));
 }
 

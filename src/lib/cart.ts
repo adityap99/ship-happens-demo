@@ -27,7 +27,10 @@ const PROMO_DB: Record<string, { percent: number; label: string }> = {
  */
 export function applyPromoCode(subtotal: number, code: string): PromoResult {
   const entry = PROMO_DB[code.trim().toUpperCase()]
-  // BUG: no null guard on `entry` — crashes for any code not in PROMO_DB
+  // Check if the promo code exists in the database
+  if (!entry) {
+    return { discount: 0, label: 'Invalid promo code' }
+  }
   return { discount: (subtotal * entry.percent) / 100, label: entry.label }
 }
 

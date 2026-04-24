@@ -32,6 +32,15 @@ export interface OrderConfirmation {
  * `address.street` on the first line throws immediately.
  */
 export function processOrder(address: OrderAddress): OrderConfirmation {
+  if (!address) {
+    return {
+      confirmationNumber: `SH-${Math.random().toString(36).substring(2, 9).toUpperCase()}`,
+      estimatedDelivery: new Date(
+        Date.now() + 7 * 24 * 60 * 60 * 1000,
+      ).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
+      shippingAddress: 'No shipping address provided',
+    };
+  }
   return {
     confirmationNumber: `SH-${Math.random().toString(36).substring(2, 9).toUpperCase()}`,
     estimatedDelivery: new Date(
